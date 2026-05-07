@@ -1,13 +1,16 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Search, Plus, Calendar, Tag, Pin, Image as ImageIcon, Mic, Share2, MoreVertical, FileText, X, Play, StopCircle, Trash2, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactQuill from 'react-quill-new';
+import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
+import { collection, addDoc, query, where, onSnapshot, serverTimestamp, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 
 interface Note {
   id: string;
   title: string;
   subject: string;
-  date: string;
+  date: any;
   content: string;
   pinned: boolean;
   tags: string[];
@@ -16,9 +19,11 @@ interface Note {
     url: string;
     name: string;
   }[];
+  user_id?: string;
 }
 
 export default function Notes() {
+  const { user } = useAuth();
   const [selectedSubject, setSelectedSubject] = useState('All');
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [newNote, setNewNote] = useState<Partial<Note>>({
@@ -34,6 +39,29 @@ export default function Notes() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const [notes, setNotes] = useState<Note[]>([]);
+
+  // Fetch Notes from Firestore
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, 'notes'),
+      where('user_id', '==', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedNotes = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Note[];
+      setNotes(fetchedNotes);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'notes');
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   const modules = {
     toolbar: [
@@ -53,30 +81,6 @@ export default function Notes() {
   ];
 
   const subjects = ['All', 'Biology', 'Chemistry', 'English', 'Mathematics', 'Philosophy'];
-  const [notes, setNotes] = useState<Note[]>([
-    { 
-      id: '1', 
-      title: 'Cell Membrane Structure', 
-      subject: 'Biology', 
-      date: '2 hours ago', 
-      content: 'The lipid bilayer consists of two layers of phospholipids with hydrophobic tails and hydrophilic heads.', 
-      pinned: true, 
-      tags: ['MCAT', 'CellBio'],
-      attachments: []
-    },
-    { 
-      id: '2', 
-      title: 'Organic Prep Notes', 
-      subject: 'Chemistry', 
-      date: 'Yesterday', 
-      content: 'Focus on SN1 and SN2 reaction mechanisms for the upcoming quiz.', 
-      pinned: false, 
-      tags: ['Chem101'],
-      attachments: [
-        { type: 'image', url: 'https://images.unsplash.com/photo-1628155930542-3c7a64e2c833?auto=format&fit=crop&q=80&w=200&h=150', name: 'Mechanism Diagram' }
-      ]
-    },
-  ]);
 
   // Voice Recording Logic
   const startRecording = async () => {
@@ -141,23 +145,43 @@ export default function Notes() {
     }
   };
 
-  const saveNote = () => {
-    if (!newNote.title || !newNote.content) return;
+  const saveNote = async () => {
+    if (!newNote.title || !newNote.content || !user) return;
     
-    const note: Note = {
-      id: Math.random().toString(36).substr(2, 9),
-      title: newNote.title!,
-      subject: newNote.subject!,
-      content: newNote.content!,
-      date: 'Just now',
-      pinned: false,
-      tags: newNote.tags || [],
-      attachments: newNote.attachments || []
-    };
+    try {
+      const noteData = {
+        title: newNote.title,
+        subject: newNote.subject,
+        content: newNote.content,
+        timestamp: serverTimestamp(),
+        pinned: false,
+        tags: newNote.tags || [],
+        attachments: newNote.attachments || [],
+        user_id: user.uid
+      };
 
-    setNotes(prev => [note, ...prev]);
-    setIsAddingNote(false);
-    setNewNote({ title: '', subject: 'Biology', content: '', tags: [], attachments: [] });
+      await addDoc(collection(db, 'notes'), noteData);
+      setIsAddingNote(false);
+      setNewNote({ title: '', subject: 'Biology', content: '', tags: [], attachments: [] });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'notes');
+    }
+  };
+
+  const deleteNote = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'notes', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'notes');
+    }
+  };
+
+  const togglePin = async (id: string, currentPinned: boolean) => {
+    try {
+      await updateDoc(doc(db, 'notes', id), { pinned: !currentPinned });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'notes');
+    }
   };
 
   const removeAttachment = (index: number) => {
@@ -219,12 +243,16 @@ export default function Notes() {
                   </div>
                   <div>
                     <h4 className="font-bold text-sm group-hover:text-[#6750A4] transition-colors">{note.title}</h4>
-                    <p className="text-[10px] text-gray-500">{note.subject} • {note.date}</p>
+                    <p className="text-[10px] text-gray-500">{note.subject} • {note.timestamp?.toDate ? note.timestamp.toDate().toLocaleDateString() : 'Just now'}</p>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  {note.pinned && <Pin size={14} className="text-[#6750A4] fill-[#6750A4]" />}
-                  <MoreVertical size={16} className="text-gray-600" />
+                  <button onClick={(e) => { e.stopPropagation(); togglePin(note.id, note.pinned); }}>
+                    <Pin size={14} className={`${note.pinned ? 'text-[#6750A4] fill-[#6750A4]' : 'text-gray-600 hover:text-[#6750A4]'}`} />
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }}>
+                    <Trash2 size={16} className="text-gray-600 hover:text-red-500" />
+                  </button>
                 </div>
               </div>
               

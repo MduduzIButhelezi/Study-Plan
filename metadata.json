@@ -1,0 +1,5 @@
+{
+  "name": "Study Plan Pro",
+  "description": "An AI-powered academic dashboard with study timers, notes with rich text and voice attachments, and timetable tracking.",
+  "requestFramePermissions": ["camera", "microphone"]
+}

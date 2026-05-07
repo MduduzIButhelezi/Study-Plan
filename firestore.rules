@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Entity Validations
+    function isValidUser(data) {
+      return data.keys().hasAll(['name', 'email']) &&
+             data.name is string && data.name.size() <= 100 &&
+             data.email is string && data.email.size() <= 100;
+    }
+
+    function isValidSubject(data) {
+      return data.keys().hasAll(['user_id', 'name']) &&
+             data.user_id == request.auth.uid &&
+             data.name is string && data.name.size() <= 100;
+    }
+
+    function isValidTimetableSession(data) {
+      return data.keys().hasAll(['user_id', 'subject_id', 'day_of_week', 'start_time', 'end_time']) &&
+             data.user_id == request.auth.uid &&
+             data.day_of_week in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] &&
+             data.start_time is string && data.end_time is string;
+    }
+
+    function isValidTask(data) {
+      return data.keys().hasAll(['user_id', 'title', 'status']) &&
+             data.user_id == request.auth.uid &&
+             data.title is string && data.title.size() <= 200 &&
+             data.status in ['To Do', 'In Progress', 'Completed', 'Overdue'];
+    }
+
+    // Collection Rules
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      request.resource.data.email == resource.data.email;
+    }
+
+    match /subjects/{subjectId} {
+      allow list: if isSignedIn() && resource.data.user_id == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.user_id == request.auth.uid;
+      allow create: if isVerified() && isValidSubject(request.resource.data);
+      allow update: if isVerified() && 
+                      resource.data.user_id == request.auth.uid && 
+                      isValidSubject(request.resource.data);
+      allow delete: if isSignedIn() && resource.data.user_id == request.auth.uid;
+    }
+
+    match /timetable/{sessionId} {
+      allow list: if isSignedIn() && resource.data.user_id == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.user_id == request.auth.uid;
+      allow create: if isVerified() && isValidTimetableSession(request.resource.data);
+      allow update: if isVerified() && 
+                      resource.data.user_id == request.auth.uid && 
+                      isValidTimetableSession(request.resource.data);
+      allow delete: if isSignedIn() && resource.data.user_id == request.auth.uid;
+    }
+
+    match /tasks/{taskId} {
+      allow list: if isSignedIn() && resource.data.user_id == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.user_id == request.auth.uid;
+      allow create: if isVerified() && isValidTask(request.resource.data);
+      allow update: if isVerified() && 
+                      resource.data.user_id == request.auth.uid && 
+                      isValidTask(request.resource.data);
+      allow delete: if isSignedIn() && resource.data.user_id == request.auth.uid;
+    }
+
+    match /notes/{noteId} {
+      allow list: if isSignedIn() && resource.data.user_id == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.user_id == request.auth.uid;
+      allow create: if isVerified() && request.resource.data.user_id == request.auth.uid;
+      allow update: if isVerified() && resource.data.user_id == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.user_id == request.auth.uid;
+    }
+  }
+}

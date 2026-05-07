@@ -1,0 +1,66 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "avatar_url": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "Educational subjects being studied",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "name": { "type": "string" },
+        "color": { "type": "string" },
+        "target_hours_per_week": { "type": "number" }
+      },
+      "required": ["user_id", "name"]
+    },
+    "TimetableSession": {
+      "title": "Timetable Session",
+      "description": "A scheduled class or study period",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "subject_id": { "type": "string" },
+        "day_of_week": { "type": "string", "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] },
+        "start_time": { "type": "string" },
+        "end_time": { "type": "string" },
+        "location": { "type": "string" },
+        "is_recurring": { "type": "boolean" }
+      },
+      "required": ["user_id", "subject_id", "day_of_week", "start_time", "end_time"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A study task or assignment",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "subject_id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "priority": { "type": "string", "enum": ["High", "Medium", "Low"] },
+        "status": { "type": "string", "enum": ["To Do", "In Progress", "Completed", "Overdue"] },
+        "due_date": { "type": "string", "format": "date-time" },
+        "estimated_duration": { "type": "number" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["user_id", "title", "status"]
+    }
+  },
+  "firestore": {
+    "users": { "schema": "User", "description": "User profiles" },
+    "subjects": { "schema": "Subject", "description": "Academic subjects" },
+    "timetable": { "schema": "TimetableSession", "description": "Scheduled sessions" },
+    "tasks": { "schema": "Task", "description": "To-do items" }
+  }
+}

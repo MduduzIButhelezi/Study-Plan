@@ -1,4 +1,6 @@
-import { logout, auth } from '../lib/firebase';
+import { useState, useEffect } from 'react';
+import { logout, auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { LogOut, User, Shield, Bell, Moon, CreditCard, ChevronRight, Settings } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -43,7 +45,9 @@ export default function Profile() {
           </button>
         </div>
 
-        <h2 className="text-2xl font-bold mb-1 tracking-tight">{user?.displayName || 'Student User'}</h2>
+        <h2 className="text-2xl font-bold mb-1 tracking-tight">
+          {user?.displayName || user?.email?.split('@')[0] || 'Student User'}
+        </h2>
         <p className="text-gray-500 text-sm mb-6">{user?.email}</p>
         
         <div className="flex gap-4 w-full">

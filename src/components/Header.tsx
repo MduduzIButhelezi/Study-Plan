@@ -12,7 +12,9 @@ export default function Header() {
   return (
     <header className="flex justify-between items-center mb-8 relative">
       <div>
-        <h1 className="text-3xl font-bold mb-1">Welcome back, {user?.displayName?.split(' ')[0] || 'Student'}.</h1>
+        <h1 className="text-3xl font-bold mb-1">
+          Welcome back, {user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'Student'}.
+        </h1>
         <p className="text-gray-400 text-sm">Focus on your goals and achieve excellence today.</p>
       </div>
       

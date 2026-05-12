@@ -10,6 +10,7 @@ import Login from './components/Login';
 import Navigation from './components/Navigation';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
+import Toaster from './components/Toaster';
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -40,6 +41,7 @@ function AppContent() {
 
   return (
     <div className="flex h-screen w-screen bg-[#1C1C1E] text-white overflow-hidden">
+      <Toaster />
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       <main className="flex-1 flex flex-col p-8 overflow-hidden">
         <Header />

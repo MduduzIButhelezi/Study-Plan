@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { loginWithEmail, signupWithEmail } from '../lib/firebase';
+import { loginWithEmail, signupWithEmail, db } from '../lib/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 import { GraduationCap, Mail, Lock, ArrowRight, UserPlus, LogIn } from 'lucide-react';
 import { useNotifications } from '../context/NotificationContext';
 
@@ -19,7 +20,14 @@ export default function Login() {
       if (isLogin) {
         await loginWithEmail(email, password);
       } else {
-        await signupWithEmail(email, password);
+        const cred = await signupWithEmail(email, password);
+        // Create user profile document
+        if (cred.user) {
+          await setDoc(doc(db, 'users', cred.user.uid), {
+            name: email.split('@')[0],
+            email: email
+          });
+        }
       }
     } catch (error: any) {
       console.error('Auth error:', error);
@@ -30,6 +38,8 @@ export default function Login() {
         message = 'This email is already registered.';
       } else if (error.code === 'auth/weak-password') {
         message = 'Password should be at least 6 characters.';
+      } else if (error.code === 'auth/invalid-credential') {
+        message = 'Invalid credentials provided.';
       }
       sendNotification('Authentication Error', message, 'error');
     } finally {

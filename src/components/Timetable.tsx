@@ -19,8 +19,19 @@ export default function Timetable() {
     start: 9,
     end: 11
   });
+
+  const openAddModal = () => {
+    setNewSession({
+      title: '',
+      loc: '',
+      day: selectedDay,
+      start: 9,
+      end: 11
+    });
+    setIsAddingSession(true);
+  };
   
-  const timeSlots = Array.from({ length: 18 }, (_, i) => i + 6); // 6 AM to 12 AM (23:00)
+  const timeSlots = Array.from({ length: 18 }, (_) => 0).map((_, i) => i + 6); // 6 AM to 12 AM (23:00)
 
   useEffect(() => {
     if (!user) return;
@@ -59,6 +70,7 @@ export default function Timetable() {
         timestamp: serverTimestamp()
       });
       setIsAddingSession(false);
+      setSelectedDay(newSession.day);
       setNewSession({ title: '', loc: '', day: 'Monday', start: 9, end: 11 });
       sendNotification('Session Added', `"${newSession.title}" added to your timetable.`, 'success');
     } catch (error) {
@@ -85,7 +97,7 @@ export default function Timetable() {
         <h2 className="text-2xl font-bold">Weekly Timetable</h2>
         <div className="flex gap-2">
           <button 
-            onClick={() => setIsAddingSession(true)}
+            onClick={openAddModal}
             className="bg-[#6750A4] text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:brightness-110"
           >
             <Plus size={18} /> Add Session
@@ -198,9 +210,13 @@ export default function Timetable() {
                   <select 
                     value={newSession.day}
                     onChange={e => setNewSession({...newSession, day: e.target.value})}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none"
+                    className="w-full bg-[#252528] border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#6750A4] text-white"
                   >
-                    {days.map(d => <option key={d} value={d}>{d}</option>)}
+                    {days.map(d => (
+                      <option key={d} value={d} className="bg-[#252528] text-white">
+                        {d}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="grid grid-cols-2 gap-2">

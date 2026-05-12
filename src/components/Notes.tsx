@@ -164,8 +164,11 @@ export default function Notes() {
 
       mediaRecorder.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-        const url = URL.createObjectURL(audioBlob);
-        setAudioUrl(url);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setAudioUrl(reader.result as string);
+        };
+        reader.readAsDataURL(audioBlob);
       };
 
       mediaRecorder.start();
@@ -438,7 +441,7 @@ export default function Notes() {
                     className="bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none"
                   >
                     {subjects.filter(s => s !== 'All').map(s => <option key={s} value={s}>{s}</option>)}
-                    {subjects.length <= 1 && <option value="General">General</option>}
+                    {!subjects.includes('General') && <option value="General">General</option>}
                   </select>
                   <div className="flex items-center gap-2 text-gray-500 text-xs">
                     <Calendar size={14} /> Today, May 7

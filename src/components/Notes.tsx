@@ -3,14 +3,14 @@ import { Search, Plus, Calendar, Tag, Pin, Image as ImageIcon, Mic, Share2, More
 import { motion, AnimatePresence } from 'motion/react';
 import ReactQuill from 'react-quill-new';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, addDoc, query, where, onSnapshot, serverTimestamp, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, query, where, onSnapshot, serverTimestamp, deleteDoc, doc, updateDoc, getDocs } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 
 interface Note {
   id: string;
   title: string;
   subject: string;
-  date: any;
   content: string;
   pinned: boolean;
   tags: string[];
@@ -20,15 +20,19 @@ interface Note {
     name: string;
   }[];
   user_id?: string;
+  timestamp?: any;
 }
 
 export default function Notes() {
   const { user } = useAuth();
+  const { sendNotification } = useNotifications();
   const [selectedSubject, setSelectedSubject] = useState('All');
   const [isAddingNote, setIsAddingNote] = useState(false);
+  const [isAddingSubject, setIsAddingSubject] = useState(false);
+  const [newSubjectName, setNewSubjectName] = useState('');
   const [newNote, setNewNote] = useState<Partial<Note>>({
     title: '',
-    subject: 'Biology',
+    subject: 'General',
     content: '',
     tags: [],
     attachments: []
@@ -40,6 +44,44 @@ export default function Notes() {
   const audioChunksRef = useRef<Blob[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [subjects, setSubjects] = useState<string[]>(['All']);
+
+  const modules = {
+    toolbar: [
+      [{ 'header': [1, 2, false] }],
+      ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+      [{ 'indent': '-1' }, { 'indent': '+1' }],
+      [{ 'color': [] }, { 'background': [] }],
+      ['clean']
+    ],
+  };
+
+  const formats = [
+    'header',
+    'bold', 'italic', 'underline', 'strike', 'blockquote',
+    'list', 'indent',
+    'color', 'background'
+  ];
+
+  // Fetch Subjects from Firestore
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, 'subjects'),
+      where('user_id', '==', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedSubjects = snapshot.docs.map(doc => doc.data().name);
+      setSubjects(['All', ...fetchedSubjects]);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'subjects');
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   // Fetch Notes from Firestore
   useEffect(() => {
@@ -63,28 +105,52 @@ export default function Notes() {
     return () => unsubscribe();
   }, [user]);
 
-  const modules = {
-    toolbar: [
-      [{ 'header': [1, 2, false] }],
-      ['bold', 'italic', 'underline', 'strike', 'blockquote'],
-      [{'list': 'ordered'}, {'list': 'bullet'}, {'indent': '-1'}, {'indent': '+1'}],
-      [{ 'color': [] }, { 'background': [] }],
-      ['clean']
-    ],
+  const handleAddSubject = async () => {
+    if (!newSubjectName.trim() || !user) return;
+    
+    try {
+      await addDoc(collection(db, 'subjects'), {
+        name: newSubjectName.trim(),
+        user_id: user.uid,
+        timestamp: serverTimestamp()
+      });
+      setNewSubjectName('');
+      setIsAddingSubject(false);
+      sendNotification('Subject Added', `Folder "${newSubjectName}" created.`, 'success');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'subjects');
+    }
   };
 
-  const formats = [
-    'header',
-    'bold', 'italic', 'underline', 'strike', 'blockquote',
-    'list', 'bullet', 'indent',
-    'color', 'background'
-  ];
+  const deleteSubject = async (name: string) => {
+    if (name === 'All') return;
+    if (!user) return;
 
-  const subjects = ['All', 'Biology', 'Chemistry', 'English', 'Mathematics', 'Philosophy'];
+    try {
+      const q = query(
+        collection(db, 'subjects'),
+        where('user_id', '==', user.uid),
+        where('name', '==', name)
+      );
+      const snapshot = await getDocs(q);
+      const deletePromises = snapshot.docs.map(d => deleteDoc(doc(db, 'subjects', d.id)));
+      await Promise.all(deletePromises);
+      
+      if (selectedSubject === name) setSelectedSubject('All');
+      sendNotification('Subject Deleted', `Folder "${name}" removed.`, 'info');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'subjects');
+    }
+  };
 
   // Voice Recording Logic
   const startRecording = async () => {
     try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        sendNotification('Recording Error', 'Microphone access is not supported in this browser.', 'error');
+        return;
+      }
+      
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
@@ -104,8 +170,15 @@ export default function Notes() {
 
       mediaRecorder.start();
       setIsRecording(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error accessing microphone:', err);
+      if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        sendNotification('Microphone Not Found', 'Please connect a microphone and try again.', 'error');
+      } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        sendNotification('Permission Denied', 'Please allow microphone access in your browser settings.', 'error');
+      } else {
+        sendNotification('Recording Error', 'Could not access microphone. Please check permissions.', 'error');
+      }
     }
   };
 
@@ -161,8 +234,9 @@ export default function Notes() {
       };
 
       await addDoc(collection(db, 'notes'), noteData);
+      sendNotification('Note Saved', `"${newNote.title}" has been saved successfully.`, 'success');
       setIsAddingNote(false);
-      setNewNote({ title: '', subject: 'Biology', content: '', tags: [], attachments: [] });
+      setNewNote({ title: '', subject: 'General', content: '', tags: [], attachments: [] });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'notes');
     }
@@ -193,24 +267,54 @@ export default function Notes() {
 
   return (
     <div className="flex h-full gap-8 overflow-hidden relative">
-      <div className="hidden md:flex flex-col w-48 shrink-0">
+      <div className="hidden md:flex flex-col w-56 shrink-0">
         <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-6">Subject Folders</h3>
         <ul className="space-y-1">
           {subjects.map(subject => (
             <li 
               key={subject}
               onClick={() => setSelectedSubject(subject)}
-              className={`p-2 rounded-xl text-sm font-medium cursor-pointer transition-all ${
-                selectedSubject === subject ? 'bg-white/5 text-white' : 'text-gray-500 hover:text-gray-300'
+              className={`p-2 rounded-xl text-sm font-medium cursor-pointer transition-all flex justify-between items-center group/item ${
+                selectedSubject === subject ? 'bg-white/5 text-white' : 'text-gray-400 hover:text-gray-300'
               }`}
             >
-              {subject}
+              <span>{subject}</span>
+              {subject !== 'All' && (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); deleteSubject(subject); }}
+                  className="opacity-0 group-hover/item:opacity-100 p-1 hover:text-red-500 transition-opacity"
+                >
+                  <X size={12} />
+                </button>
+              )}
             </li>
           ))}
         </ul>
-        <button className="mt-8 flex items-center gap-2 text-xs font-bold text-[#6750A4] hover:brightness-110">
-          <Plus size={16} /> New Folder
-        </button>
+        
+        {isAddingSubject ? (
+          <div className="mt-4 flex flex-col gap-2">
+            <input 
+              autoFocus
+              type="text" 
+              value={newSubjectName}
+              onChange={(e) => setNewSubjectName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddSubject()}
+              placeholder="Folder name..."
+              className="bg-[#252528] border border-white/10 rounded-lg px-2 py-1.5 text-xs w-full focus:outline-none focus:border-[#6750A4]"
+            />
+            <div className="flex gap-2">
+              <button onClick={handleAddSubject} className="text-[10px] bg-[#6750A4] px-2 py-1 rounded text-white font-bold">Add</button>
+              <button onClick={() => setIsAddingSubject(false)} className="text-[10px] text-gray-500">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <button 
+            onClick={() => setIsAddingSubject(true)}
+            className="mt-8 flex items-center gap-2 text-xs font-bold text-[#6750A4] hover:brightness-110"
+          >
+            <Plus size={16} /> New Folder
+          </button>
+        )}
       </div>
 
       <div className="flex-1 flex flex-col gap-6 overflow-hidden">
@@ -334,6 +438,7 @@ export default function Notes() {
                     className="bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none"
                   >
                     {subjects.filter(s => s !== 'All').map(s => <option key={s} value={s}>{s}</option>)}
+                    {subjects.length <= 1 && <option value="General">General</option>}
                   </select>
                   <div className="flex items-center gap-2 text-gray-500 text-xs">
                     <Calendar size={14} /> Today, May 7

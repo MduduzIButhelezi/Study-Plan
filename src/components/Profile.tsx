@@ -4,6 +4,16 @@ import { useAuth } from '../context/AuthContext';
 
 export default function Profile() {
   const { user } = useAuth();
+  const [taskCount, setTaskCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'tasks'), where('user_id', '==', user.uid));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setTaskCount(snapshot.size);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'tasks'));
+    return () => unsubscribe();
+  }, [user]);
   
   const sections = [
     { label: 'Academic Settings', icon: Shield, color: '#6750A4' },
@@ -21,10 +31,10 @@ export default function Profile() {
         <div className="relative mb-4">
           <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-[#6750A4] to-[#008080] p-1 shadow-xl">
             {user?.photoURL ? (
-              <img src={user.photoURL} alt="Profile" className="w-full h-full rounded-full object-cover border-4 border-[#252528]" />
+              <img src={user.photoURL} alt="Profile" className="w-full h-full rounded-full object-cover border-4 border-[#252528]" referrerPolicy="no-referrer" />
             ) : (
               <div className="w-full h-full rounded-full bg-[#252528] flex items-center justify-center text-3xl font-bold border-4 border-[#252528]">
-                {user?.displayName?.charAt(0) || '?'}
+                {user?.displayName?.charAt(0) || user?.email?.charAt(0) || '?'}
               </div>
             )}
           </div>
@@ -33,21 +43,21 @@ export default function Profile() {
           </button>
         </div>
 
-        <h2 className="text-2xl font-bold mb-1 tracking-tight">{user?.displayName || 'Student Name'}</h2>
+        <h2 className="text-2xl font-bold mb-1 tracking-tight">{user?.displayName || 'Student User'}</h2>
         <p className="text-gray-500 text-sm mb-6">{user?.email}</p>
         
         <div className="flex gap-4 w-full">
           <div className="flex-1 bg-white/5 rounded-2xl p-4 border border-white/10 text-center">
-            <p className="text-lg font-bold text-white">3.82</p>
+            <p className="text-lg font-bold text-white">-</p>
             <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mt-1">Current GPA</p>
           </div>
           <div className="flex-1 bg-white/5 rounded-2xl p-4 border border-white/10 text-center">
-            <p className="text-lg font-bold text-white">42</p>
-            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mt-1">Assignments</p>
+            <p className="text-lg font-bold text-white">{taskCount}</p>
+            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mt-1">Total Tasks</p>
           </div>
           <div className="flex-1 bg-white/5 rounded-2xl p-4 border border-white/10 text-center">
-            <p className="text-lg font-bold text-white">12</p>
-            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mt-1">Exams Left</p>
+            <p className="text-lg font-bold text-white">0</p>
+            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mt-1">Exams Tracked</p>
           </div>
         </div>
       </div>

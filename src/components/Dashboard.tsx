@@ -2,12 +2,54 @@ import { useState, useEffect } from 'react';
 import { Play, Pause, RotateCcw, Brain, Clock, ChevronRight, TrendingUp, Calendar, CheckSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNotifications } from '../context/NotificationContext';
+import { useAuth } from '../context/AuthContext';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { collection, query, where, onSnapshot, limit, orderBy } from 'firebase/firestore';
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const [timeLeft, setTimeLeft] = useState(25 * 60);
   const [isActive, setIsActive] = useState(false);
   const [sessionType, setSessionType] = useState<'study' | 'break'>('study');
   const { sendNotification } = useNotifications();
+
+  const [todaySessions, setTodaySessions] = useState<any[]>([]);
+  const [pendingTasks, setPendingTasks] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const currentDay = days[new Date().getDay()];
+
+    const qTimetable = query(
+      collection(db, 'timetable'),
+      where('user_id', '==', user.uid),
+      where('day_of_week', '==', currentDay)
+    );
+
+    const unsubscribeTimetable = onSnapshot(qTimetable, (snapshot) => {
+      const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setTodaySessions(fetched);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'timetable'));
+
+    const qTasks = query(
+      collection(db, 'tasks'),
+      where('user_id', '==', user.uid),
+      where('status', '!=', 'Completed'),
+      limit(5)
+    );
+
+    const unsubscribeTasks = onSnapshot(qTasks, (snapshot) => {
+      const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setPendingTasks(fetched);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'tasks'));
+
+    return () => {
+      unsubscribeTimetable();
+      unsubscribeTasks();
+    };
+  }, [user]);
 
   useEffect(() => {
     let interval: any = null;
@@ -24,8 +66,6 @@ export default function Dashboard() {
         : "Hope you're refreshed! Ready for another study block?";
       
       sendNotification(title, message, sessionType === 'study' ? 'success' : 'info');
-
-      // Simple sound effect could go here
     }
     return () => clearInterval(interval);
   }, [isActive, timeLeft, sessionType, sendNotification]);
@@ -46,13 +86,13 @@ export default function Dashboard() {
           <div className="relative z-10">
             <div className="flex items-center gap-2 mb-2">
               <Brain size={18} className="text-purple-300" />
-              <h2 className="text-xl font-bold">AI Performance Insight 🧠</h2>
+              <h2 className="text-xl font-bold">Your Academic Journey 🌟</h2>
             </div>
             <p className="text-purple-100 max-w-md text-sm leading-relaxed mb-4">
-              Your Math performance drops when you study less than 3 hours/week. We've adjusted your tomorrow's block to focus on Algebra.
+              Welcome to your personal dashboard. Track your growth, manage your time, and achieve your peak performance.
             </p>
             <button className="flex items-center gap-1 text-xs font-bold bg-white/20 hover:bg-white/30 backdrop-blur-md px-3 py-1.5 rounded-full transition-all">
-              See detailed report <ChevronRight size={14} />
+              View Insights <ChevronRight size={14} />
             </button>
           </div>
           <div className="absolute right-[-20px] top-[-20px] opacity-10 text-[120px] group-hover:scale-110 transition-transform duration-700">⚡</div>
@@ -66,31 +106,25 @@ export default function Dashboard() {
                 <Calendar size={18} className="text-[#008080]" />
                 Today's Timetable
               </h3>
-              <span className="text-xs text-[#008080] font-bold uppercase cursor-pointer hover:underline">View All</span>
             </div>
             
             <div className="space-y-4 overflow-y-auto scrollbar-hide flex-1">
-              {[
-                { title: 'Advanced Calculus', time: '09:00 AM - 10:30 AM', loc: 'Room 402', color: '#6750A4', type: 'Class' },
-                { title: 'Organic Chemistry', time: '11:00 AM - 12:30 PM', loc: 'Library', color: '#008080', type: 'Study', opacity: 0.6 },
-                { title: 'AI Ethics Seminar', time: '02:00 PM - 03:30 PM', loc: 'Zoom', color: '#f59e0b', type: 'Workshop' },
-                { title: 'Literature Review', time: '04:00 PM - 05:30 PM', loc: 'Home', color: '#ec4899', type: 'Tasks' },
-              ].map((session, i) => (
-                <div key={i} className={`flex gap-4 items-center ${session.opacity ? 'opacity-60' : ''}`}>
-                  <div className="w-1 h-12 rounded-full" style={{ backgroundColor: session.color }}></div>
-                  <div className="flex-1">
-                    <p className="font-semibold text-sm">{session.title}</p>
-                    <p className="text-xs text-gray-500 italic">{session.time} • {session.loc}</p>
-                  </div>
-                  <div className={`text-[10px] px-2 py-1 rounded-full border ${
-                    session.type === 'Class' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
-                    session.type === 'Study' ? 'bg-teal-500/10 text-teal-400 border-teal-500/20' :
-                    'bg-orange-500/10 text-orange-400 border-orange-500/20'
-                  }`}>
-                    {session.type}
-                  </div>
+              {todaySessions.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
+                  <Calendar size={40} className="mb-2" />
+                  <p className="text-xs">No sessions scheduled for today</p>
                 </div>
-              ))}
+              ) : (
+                todaySessions.map((session, i) => (
+                  <div key={i} className="flex gap-4 items-center">
+                    <div className="w-1 h-12 rounded-full bg-[#6750A4]"></div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-sm">{session.title}</p>
+                      <p className="text-xs text-gray-500 italic">{session.start_time} - {session.end_time}</p>
+                    </div>
+                  </div>
+                ) || [])
+              )}
             </div>
           </div>
 
@@ -101,30 +135,24 @@ export default function Dashboard() {
                 <CheckSquare size={18} className="text-[#6750A4]" />
                 Pending Tasks
               </h3>
-              <button className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-all">+</button>
             </div>
             
             <div className="space-y-4 overflow-y-auto scrollbar-hide flex-1">
-              {[
-                { title: 'Lab Report Draft', subject: 'Biology', date: 'Due in 4 hours', progress: 75, color: '#ef4444' },
-                { title: 'Lit Review: Post-modernism', subject: 'Eng Literature', date: 'Tomorrow', progress: 25, color: '#eab308' },
-                { title: 'Algebra Problem Set', subject: 'Mathematics', date: 'Friday', progress: 0, color: '#6750A4' },
-              ].map((task, i) => (
-                <div key={i} className="p-4 bg-white/5 rounded-2xl border border-white/10 hover:border-[#6750A4] transition-all cursor-pointer group">
-                  <div className="flex justify-between items-start mb-1">
-                    <p className="text-sm font-medium group-hover:text-white transition-colors">{task.title}</p>
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: task.color }}></div>
+              {pendingTasks.length === 0 ? (
+                 <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
+                    <CheckSquare size={40} className="mb-2" />
+                    <p className="text-xs">All caught up! Time to relax.</p>
+                 </div>
+              ) : (
+                pendingTasks.map((task, i) => (
+                  <div key={i} className="p-4 bg-white/5 rounded-2xl border border-white/10 hover:border-[#6750A4] transition-all group">
+                    <div className="flex justify-between items-start mb-1">
+                      <p className="text-sm font-medium group-hover:text-white transition-colors">{task.title}</p>
+                    </div>
+                    <p className="text-[10px] text-gray-500 mb-2">{task.subject} • {task.dueDate || 'No due date'}</p>
                   </div>
-                  <p className="text-[10px] text-gray-500 mb-2">{task.subject} • {task.date}</p>
-                  <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: `${task.progress}%` }}
-                      className="h-full bg-[#6750A4]"
-                    ></motion.div>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -179,36 +207,25 @@ export default function Dashboard() {
           </div>
           
           <div className="space-y-4 mb-8">
-            {[
-              { title: 'Physics Finals', date: 'May 18, 09:00 AM', days: '02', color: '#ef4444' },
-              { title: 'History Quiz', date: 'May 25, 01:30 PM', days: '09', color: '#f59e0b' },
-            ].map((exam, i) => (
-              <div key={i} className="flex items-center gap-4 group cursor-pointer">
-                <div className="w-12 h-12 rounded-2xl flex flex-col items-center justify-center transition-all group-hover:scale-105" style={{ backgroundColor: `${exam.color}20`, color: exam.color }}>
-                  <span className="text-lg font-bold">{exam.days}</span>
-                  <span className="text-[8px] uppercase font-bold">Days</span>
-                </div>
-                <div>
-                  <p className="text-sm font-bold">{exam.title}</p>
-                  <p className="text-[10px] text-gray-500">{exam.date}</p>
-                </div>
-              </div>
-            ))}
+            <div className="h-20 flex flex-col items-center justify-center text-center opacity-40 border-2 border-dashed border-white/5 rounded-2xl">
+              <TrendingUp size={24} className="mb-1" />
+              <p className="text-[10px]">No upcoming exams tracked</p>
+            </div>
           </div>
 
           <div className="mt-auto pt-6 border-t border-white/10">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Weekly Goal Status</h3>
-              <span className="text-xs font-bold text-[#6750A4]">18/25 hrs</span>
+              <span className="text-xs font-bold text-[#6750A4]">0/25 hrs</span>
             </div>
             
             <div className="flex justify-between items-end gap-2 h-20">
-              {[60, 80, 100, 40, 70, 50, 20].map((h, i) => (
+              {[0, 0, 0, 0, 0, 0, 0].map((h, i) => (
                 <div key={i} className="flex flex-col items-center flex-1 gap-2">
                   <motion.div 
                     initial={{ height: 0 }}
                     animate={{ height: `${h}%` }}
-                    className={`w-full rounded-t-lg transition-shadow duration-500 ${h === 100 ? 'bg-[#6750A4] shadow-[0_0_15px_rgba(103,80,164,0.4)]' : 'bg-[#6750A4]/20'}`}
+                    className="w-full rounded-t-lg bg-[#6750A4]/20"
                   ></motion.div>
                 </div>
               ))}

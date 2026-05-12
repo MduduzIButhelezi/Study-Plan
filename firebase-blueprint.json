@@ -6,9 +6,7 @@
       "type": "object",
       "properties": {
         "name": { "type": "string" },
-        "email": { "type": "string" },
-        "avatar_url": { "type": "string" },
-        "created_at": { "type": "string", "format": "date-time" }
+        "email": { "type": "string" }
       },
       "required": ["name", "email"]
     },
@@ -19,25 +17,26 @@
       "properties": {
         "user_id": { "type": "string" },
         "name": { "type": "string" },
-        "color": { "type": "string" },
-        "target_hours_per_week": { "type": "number" }
+        "timestamp": { "type": "string", "format": "date-time" }
       },
-      "required": ["user_id", "name"]
+      "required": ["user_id", "name", "timestamp"]
     },
     "TimetableSession": {
       "title": "Timetable Session",
       "description": "A scheduled class or study period",
       "type": "object",
       "properties": {
-        "user_id": { "type": "string" },
-        "subject_id": { "type": "string" },
+        "title": { "type": "string" },
+        "loc": { "type": "string" },
         "day_of_week": { "type": "string", "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] },
         "start_time": { "type": "string" },
         "end_time": { "type": "string" },
-        "location": { "type": "string" },
-        "is_recurring": { "type": "boolean" }
+        "start": { "type": "number" },
+        "end": { "type": "number" },
+        "user_id": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
       },
-      "required": ["user_id", "subject_id", "day_of_week", "start_time", "end_time"]
+      "required": ["title", "loc", "day_of_week", "start_time", "end_time", "start", "end", "user_id", "timestamp"]
     },
     "Task": {
       "title": "Task",
@@ -45,22 +44,38 @@
       "type": "object",
       "properties": {
         "user_id": { "type": "string" },
-        "subject_id": { "type": "string" },
         "title": { "type": "string" },
-        "description": { "type": "string" },
+        "subject": { "type": "string" },
         "priority": { "type": "string", "enum": ["High", "Medium", "Low"] },
         "status": { "type": "string", "enum": ["To Do", "In Progress", "Completed", "Overdue"] },
-        "due_date": { "type": "string", "format": "date-time" },
-        "estimated_duration": { "type": "number" },
-        "created_at": { "type": "string", "format": "date-time" }
+        "dueDate": { "type": "string" },
+        "progress": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" }
       },
-      "required": ["user_id", "title", "status"]
+      "required": ["user_id", "title", "subject", "priority", "status", "dueDate", "progress", "timestamp"]
+    },
+    "Note": {
+      "title": "Note",
+      "description": "Study notes with attachments",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subject": { "type": "string" },
+        "content": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "pinned": { "type": "boolean" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "attachments": { "type": "array" },
+        "user_id": { "type": "string" }
+      },
+      "required": ["title", "subject", "content", "timestamp", "pinned", "tags", "attachments", "user_id"]
     }
   },
   "firestore": {
     "users": { "schema": "User", "description": "User profiles" },
     "subjects": { "schema": "Subject", "description": "Academic subjects" },
     "timetable": { "schema": "TimetableSession", "description": "Scheduled sessions" },
-    "tasks": { "schema": "Task", "description": "To-do items" }
+    "tasks": { "schema": "Task", "description": "To-do items" },
+    "notes": { "schema": "Note", "description": "Study notes" }
   }
 }

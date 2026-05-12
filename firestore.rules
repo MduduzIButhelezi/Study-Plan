@@ -23,76 +23,98 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
     // Entity Validations
     function isValidUser(data) {
       return data.keys().hasAll(['name', 'email']) &&
+             data.keys().size() == 2 &&
              data.name is string && data.name.size() <= 100 &&
              data.email is string && data.email.size() <= 100;
     }
 
     function isValidSubject(data) {
-      return data.keys().hasAll(['user_id', 'name']) &&
+      return data.keys().hasAll(['user_id', 'name', 'timestamp']) &&
              data.user_id == request.auth.uid &&
-             data.name is string && data.name.size() <= 100;
+             data.name is string && data.name.size() <= 100 &&
+             (data.timestamp == request.time || data.timestamp is timestamp);
     }
 
     function isValidTimetableSession(data) {
-      return data.keys().hasAll(['user_id', 'subject_id', 'day_of_week', 'start_time', 'end_time']) &&
+      return data.keys().hasAll(['title', 'loc', 'day_of_week', 'start_time', 'end_time', 'start', 'end', 'user_id', 'timestamp']) &&
              data.user_id == request.auth.uid &&
+             data.title is string && data.title.size() <= 200 &&
+             data.loc is string && data.loc.size() <= 200 &&
              data.day_of_week in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] &&
-             data.start_time is string && data.end_time is string;
+             data.start_time is string && data.start_time.size() <= 10 &&
+             data.end_time is string && data.end_time.size() <= 10 &&
+             data.start is number &&
+             data.end is number &&
+             (data.timestamp == request.time || data.timestamp is timestamp);
     }
 
     function isValidTask(data) {
-      return data.keys().hasAll(['user_id', 'title', 'status']) &&
+      return data.keys().hasAll(['user_id', 'title', 'subject', 'priority', 'status', 'dueDate', 'progress', 'timestamp']) &&
              data.user_id == request.auth.uid &&
              data.title is string && data.title.size() <= 200 &&
-             data.status in ['To Do', 'In Progress', 'Completed', 'Overdue'];
+             data.subject is string && data.subject.size() <= 100 &&
+             data.priority in ['High', 'Medium', 'Low'] &&
+             data.status in ['To Do', 'In Progress', 'Completed', 'Overdue'] &&
+             data.dueDate is string &&
+             data.progress is number &&
+             (data.timestamp == request.time || data.timestamp is timestamp);
+    }
+
+    function isValidNote(data) {
+      return data.keys().hasAll(['user_id', 'title', 'subject', 'content', 'timestamp', 'pinned', 'tags', 'attachments']) &&
+             data.user_id == request.auth.uid &&
+             data.title is string && data.title.size() <= 200 &&
+             data.subject is string && data.subject.size() <= 100 &&
+             data.content is string && data.content.size() <= 50000 &&
+             data.pinned is bool &&
+             data.tags is list && data.tags.size() <= 20 &&
+             data.attachments is list && data.attachments.size() <= 20 &&
+             (data.timestamp == request.time || data.timestamp is timestamp);
     }
 
     // Collection Rules
     match /users/{userId} {
       allow get: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
-                      request.resource.data.email == resource.data.email;
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming()) && 
+                      incoming().email == existing().email;
     }
 
     match /subjects/{subjectId} {
       allow list: if isSignedIn() && resource.data.user_id == request.auth.uid;
       allow get: if isSignedIn() && resource.data.user_id == request.auth.uid;
-      allow create: if isVerified() && isValidSubject(request.resource.data);
-      allow update: if isVerified() && 
-                      resource.data.user_id == request.auth.uid && 
-                      isValidSubject(request.resource.data);
+      allow create: if isSignedIn() && isValidSubject(incoming());
+      allow update: if isSignedIn() && resource.data.user_id == request.auth.uid && isValidSubject(incoming());
       allow delete: if isSignedIn() && resource.data.user_id == request.auth.uid;
     }
 
     match /timetable/{sessionId} {
       allow list: if isSignedIn() && resource.data.user_id == request.auth.uid;
       allow get: if isSignedIn() && resource.data.user_id == request.auth.uid;
-      allow create: if isVerified() && isValidTimetableSession(request.resource.data);
-      allow update: if isVerified() && 
-                      resource.data.user_id == request.auth.uid && 
-                      isValidTimetableSession(request.resource.data);
+      allow create: if isSignedIn() && isValidTimetableSession(incoming());
+      allow update: if isSignedIn() && resource.data.user_id == request.auth.uid && isValidTimetableSession(incoming());
       allow delete: if isSignedIn() && resource.data.user_id == request.auth.uid;
     }
 
     match /tasks/{taskId} {
       allow list: if isSignedIn() && resource.data.user_id == request.auth.uid;
       allow get: if isSignedIn() && resource.data.user_id == request.auth.uid;
-      allow create: if isVerified() && isValidTask(request.resource.data);
-      allow update: if isVerified() && 
-                      resource.data.user_id == request.auth.uid && 
-                      isValidTask(request.resource.data);
+      allow create: if isSignedIn() && isValidTask(incoming());
+      allow update: if isSignedIn() && resource.data.user_id == request.auth.uid && isValidTask(incoming());
       allow delete: if isSignedIn() && resource.data.user_id == request.auth.uid;
     }
 
     match /notes/{noteId} {
       allow list: if isSignedIn() && resource.data.user_id == request.auth.uid;
       allow get: if isSignedIn() && resource.data.user_id == request.auth.uid;
-      allow create: if isVerified() && request.resource.data.user_id == request.auth.uid;
-      allow update: if isVerified() && resource.data.user_id == request.auth.uid;
+      allow create: if isSignedIn() && isValidNote(incoming());
+      allow update: if isSignedIn() && resource.data.user_id == request.auth.uid && isValidNote(incoming());
       allow delete: if isSignedIn() && resource.data.user_id == request.auth.uid;
     }
   }
